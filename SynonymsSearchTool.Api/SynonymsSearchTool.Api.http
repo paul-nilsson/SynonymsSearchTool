@@ -1,0 +1,6 @@
+@SynonymsSearchTool.Api_HostAddress = http://localhost:5224
+
+GET {{SynonymsSearchTool.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
