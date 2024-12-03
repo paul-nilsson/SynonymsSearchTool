@@ -25,7 +25,7 @@ namespace SynonymsSearchTool.Application.Services
         }
 
         /// <summary>
-        /// Asynchronously retrieves synonyms for a given word.
+        /// Asynchronously retrieves synonyms for a given word, including transitive synonyms.
         /// If synonyms are found, they are returned as a DTO (SynonymsDto).
         /// If no synonyms are found, an empty SynonymsDto with an empty synonym list is returned.
         /// </summary>
@@ -38,11 +38,18 @@ namespace SynonymsSearchTool.Application.Services
             {
                 // Create a new SynonymList object for the word
                 var synonymList = new SynonymGroup(word);
+                var allSynonyms = new HashSet<string>(relatedWords);
 
-                // Add each related word (synonym) to the SynonymList
+                // Fetch transitive synonyms
                 foreach (var relatedWord in relatedWords)
                 {
-                    synonymList.AddSynonym(relatedWord);
+                    allSynonyms.UnionWith(GetTransitiveSynonyms(relatedWord, []));
+                }
+
+                // Add each related word (synonym) to the SynonymList
+                foreach (var synonym in allSynonyms)
+                {
+                    synonymList.AddSynonym(synonym);
                 }
 
                 // Return the SynonymList as a DTO using the ToDto method
@@ -67,30 +74,58 @@ namespace SynonymsSearchTool.Application.Services
             // Convert the SaveSynonymsDto to a SynonymList domain model
             var synonymList = DomainToDtoMapper.ToDomain(dto);
 
-            // Check if the word already exists in the dictionary; if not, create a new HashSet for its synonyms
-            if (!_synonyms.TryGetValue(synonymList.Word, out var wordSynonyms))
+            // Create a unified set of all words in the group (word and its synonyms).
+            var allWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                wordSynonyms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                _synonyms[synonymList.Word] = wordSynonyms;
-            }
+                synonymList.Word
+            };
+            allWords.UnionWith(synonymList.Synonyms);
 
-            // Add each synonym from the SynonymList to the dictionary
-            foreach (var synonym in synonymList.Synonyms)
+            // Add each word to the dictionary, ensuring bidirectional relationships.
+            foreach (var word in allWords)
             {
-                wordSynonyms.Add(synonym);
-
-                // For each synonym, ensure it is also added to the dictionary if it doesn't already exist
-                if (!_synonyms.TryGetValue(synonym, out var synonymGroup))
+                if (!_synonyms.TryGetValue(word, out var wordSynonyms))
                 {
-                    synonymGroup = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    _synonyms[synonym] = synonymGroup;
+                    wordSynonyms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    _synonyms[word] = wordSynonyms;
                 }
-
-                // Add the original word as a synonym to the synonym group's list (ensure bidirectional synonym relationship)
-                synonymGroup.Add(synonymList.Word);
+                wordSynonyms.UnionWith(allWords);
             }
 
-            return Task.CompletedTask;
+            return Task.CompletedTask; // Indicate the task is complete.
+        }
+
+        /// <summary>
+        /// Recursively retrieves transitive synonyms for a word.
+        /// </summary>
+        /// <param name="word">The word for which transitive synonyms are being fetched.</param>
+        /// <param name="visited">Set of words already visited to prevent infinite loops.</param>
+        /// <returns>A set of transitive synonyms.</returns>
+        private HashSet<string> GetTransitiveSynonyms(string word, HashSet<string> visited)
+        {
+            var transitiveSynonyms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // If the word has already been visited, return an empty set to avoid cycles.
+            if (visited.Contains(word))
+                return transitiveSynonyms;
+
+            // Mark the word as visited.
+            visited.Add(word);
+
+            // Check if the word exists in the dictionary.
+            if (_synonyms.TryGetValue(word, out var relatedWords))
+            {
+                foreach (var relatedWord in relatedWords)
+                {
+                    // Add the related word to the transitive synonyms.
+                    transitiveSynonyms.Add(relatedWord);
+
+                    // Recursively fetch transitive synonyms for the related word.
+                    transitiveSynonyms.UnionWith(GetTransitiveSynonyms(relatedWord, visited));
+                }
+            }
+
+            return transitiveSynonyms; // Return the full set of transitive synonyms.
         }
     }
 }

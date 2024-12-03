@@ -127,7 +127,7 @@ public class SynonymServiceTests
         var synonymsDict = (Dictionary<string, HashSet<string>>)internalField.GetValue(_synonymService);
 
         // Assert: Ensure that the word only has the expected number of unique synonyms.
-        Assert.Equal(3, synonymsDict[word].Count);  // The word should have exactly 3 synonyms (no duplicates).
+        Assert.Equal(4, synonymsDict[word].Count);  // The word should have exactly 4 synonyms (no duplicates).
     }
 
     #endregion
